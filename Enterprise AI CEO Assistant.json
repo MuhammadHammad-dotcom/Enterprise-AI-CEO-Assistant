@@ -1,0 +1,977 @@
+{
+  "name": "Enterprise AI CEO Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 1. Intake & Understand\nEmail Trigger receives the CEO email → Extract CEO Message normalizes subject/body/sender → CEO AI Agent (Gemini) classifies it and generates the deliverable as structured JSON."
+      },
+      "id": "d1542d29-76ca-4b2c-a9c8-2c3835f5a0d8",
+      "name": "Sticky Note d1542d29",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        416,
+        -208
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 2. Route & Act\nRoute By Category (Switch) sends the request to the matching branch. Email → Gmail, Meeting → Google Calendar. Sales/Finance/Reports/Research/General are content branches (extend them later). Fallback catches anything unclassified."
+      },
+      "id": "79a4b2a3-0563-446c-8a84-1a0b4abfd186",
+      "name": "Sticky Note 79a4b2a3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 3. Log & Reply\nAll branches converge → Build Log Entry → append to Google Sheets → email the final status back to the CEO. Action nodes use \"continue on error\" so logging and the reply always run."
+      },
+      "id": "524a96e3-dd54-43b6-83b0-f046672f9fc1",
+      "name": "Sticky Note 524a96e3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -112,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "readStatus": "unread"
+        },
+        "options": {}
+      },
+      "id": "ac566427-3fcf-414b-9766-879927fcdfb4",
+      "name": "Email Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        672
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "KuPfNBIquk5rjjor",
+          "name": "Gmail OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "message",
+              "type": "string",
+              "value": "={{ $json.subject }}\n\n{{ $json.text }}"
+            },
+            {
+              "id": "a2",
+              "name": "from",
+              "type": "string",
+              "value": "={{ $json.from.value[0].address || $json.from }}"
+            },
+            {
+              "id": "a3",
+              "name": "userName",
+              "type": "string",
+              "value": "={{ $json.from.value[0].name || $json.from }}"
+            },
+            {
+              "id": "a4",
+              "name": "requestDate",
+              "type": "string",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ad89b367-bec6-4745-a376-dead3809ccda",
+      "name": "Extract CEO Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        672
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are the Enterprise AI CEO Assistant. You receive short business requests from the CEO via WhatsApp.\n\nYour job:\n1. Classify each request into exactly ONE category: Email, Meeting, Sales, Finance, Reports, Research, or General Task.\n2. Produce the actual deliverable in the \"result\" field, written professionally and ready to use:\n   - Email: write a complete, professional email body (greeting, body, sign-off). Fill email_to and email_subject when the CEO names a recipient/subject.\n   - Meeting: write a clear meeting agenda in \"result\" and fill meeting_title, meeting_start, meeting_end (ISO 8601). If no time is given, propose a sensible next-business-day slot.\n   - Sales: generate a quotation (line items, prices, totals) and a suggested follow-up reminder.\n   - Finance: calculate the requested totals and produce a concise payment/finance summary.\n   - Reports: generate a daily or weekly business report.\n   - Research: summarise the topic into clear bullet points.\n   - General Task: give a concise, helpful answer or action plan.\n3. Always return valid JSON matching the required schema. Use empty strings for fields that do not apply.\n\nRules: be concise and business-appropriate. Never invent confidential figures; if data is missing, state assumptions inside \"result\"."
+        }
+      },
+      "id": "498690b0-a4d6-41f2-ba99-54a30dbf2b6d",
+      "name": "CEO AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.9,
+      "position": [
+        512,
+        672
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "id": "a2815c90-cc5b-409f-8080-cfd847e337dd",
+      "name": "Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        896
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "xsFQnyN1lorCzf8T",
+          "name": "Google Gemini(PaLM) Api account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "=ceo_{{ $('Email Trigger').item.json.from }}"
+      },
+      "id": "78c6e6fb-9664-4a7a-84c8-d5e164b06c20",
+      "name": "CEO Conversation Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        576,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"category\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"Email\",\n        \"Meeting\",\n        \"Sales\",\n        \"Finance\",\n        \"Reports\",\n        \"Research\",\n        \"General Task\"\n      ],\n      \"description\": \"The single business category the request belongs to.\"\n    },\n    \"reasoning\": {\n      \"type\": \"string\",\n      \"description\": \"One short sentence explaining the classification.\"\n    },\n    \"summary\": {\n      \"type\": \"string\",\n      \"description\": \"One-line summary of what the CEO asked for.\"\n    },\n    \"result\": {\n      \"type\": \"string\",\n      \"description\": \"The fully generated deliverable: email body, meeting agenda, quotation, finance/payment summary, business report, research bullet points, or a general answer.\"\n    },\n    \"email_to\": {\n      \"type\": \"string\",\n      \"description\": \"Recipient email if the request is an Email, else empty string.\"\n    },\n    \"email_subject\": {\n      \"type\": \"string\",\n      \"description\": \"Email subject line if Email, else empty string.\"\n    },\n    \"meeting_title\": {\n      \"type\": \"string\",\n      \"description\": \"Meeting title if Meeting, else empty string.\"\n    },\n    \"meeting_start\": {\n      \"type\": \"string\",\n      \"description\": \"Meeting start in ISO 8601 (e.g. 2026-07-21T10:00:00) if Meeting, else empty string.\"\n    },\n    \"meeting_end\": {\n      \"type\": \"string\",\n      \"description\": \"Meeting end in ISO 8601 if Meeting, else empty string.\"\n    }\n  },\n  \"required\": [\n    \"category\",\n    \"summary\",\n    \"result\"\n  ]\n}"
+      },
+      "id": "38b40af0-c93c-4a0d-aec4-34257a1c234d",
+      "name": "CEO Response Schema",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        704,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "r0",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.output.category }}",
+                    "rightValue": "Email"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Email"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "r1",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.output.category }}",
+                    "rightValue": "Meeting"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Meeting"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "r2",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.output.category }}",
+                    "rightValue": "Sales"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Sales"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "r3",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.output.category }}",
+                    "rightValue": "Finance"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Finance"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "r4",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.output.category }}",
+                    "rightValue": "Reports"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Reports"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "r5",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.output.category }}",
+                    "rightValue": "Research"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Research"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "r6",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.output.category }}",
+                    "rightValue": "General Task"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "General Task"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "1f1a2895-f6be-4601-861f-732b0011fff1",
+      "name": "Route By Category",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        912,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('CEO AI Agent').item.json.output.email_to }}",
+        "subject": "={{ $('CEO AI Agent').item.json.output.email_subject }}",
+        "emailType": "text",
+        "message": "={{ $('CEO AI Agent').item.json.output.result }}",
+        "options": {}
+      },
+      "id": "c2d488e5-9985-4a1e-b04d-0cfe5b8776ff",
+      "name": "Send Email (Gmail)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1136,
+        0
+      ],
+      "webhookId": "c8186481-c5bb-40bb-8ca3-4e283fe9ce33",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "KuPfNBIquk5rjjor",
+          "name": "Gmail OAuth2 API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "l1",
+              "name": "Date",
+              "type": "string",
+              "value": "={{ $('Extract CEO Message').item.json.requestDate }}"
+            },
+            {
+              "id": "l2",
+              "name": "User",
+              "type": "string",
+              "value": "={{ $('Extract CEO Message').item.json.userName }} ({{ $('Extract CEO Message').item.json.from }})"
+            },
+            {
+              "id": "l3",
+              "name": "Category",
+              "type": "string",
+              "value": "={{ $('CEO AI Agent').item.json.output.category }}"
+            },
+            {
+              "id": "l4",
+              "name": "Status",
+              "type": "string",
+              "value": "Completed"
+            },
+            {
+              "id": "l5",
+              "name": "Result",
+              "type": "string",
+              "value": "={{ $('CEO AI Agent').item.json.output.result }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "27b49a76-b590-4407-ab76-cd0c8aac7ed3",
+      "name": "Build Log Entry",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1360,
+        672
+      ]
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "en.pk#holiday@group.v.calendar.google.com",
+          "mode": "list",
+          "cachedResultName": "Holidays in Pakistan"
+        },
+        "start": "={{ $('CEO AI Agent').item.json.output.meeting_start || $now.toISO() }}",
+        "end": "={{ $('CEO AI Agent').item.json.output.meeting_end || $now.plus(1, 'hour').toISO() }}",
+        "additionalFields": {
+          "description": "={{ $('CEO AI Agent').item.json.output.result }}",
+          "summary": "={{ $('CEO AI Agent').item.json.output.meeting_title }}"
+        }
+      },
+      "id": "6460f0b3-b886-4cab-baa4-02f407f29b0b",
+      "name": "Create Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1136,
+        192
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "T9zUlEZVeL0tx5qR",
+          "name": "Google Calendar OAuth2 API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b1",
+              "name": "branch",
+              "type": "string",
+              "value": "Sales"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "eb1f5aec-4281-468e-b416-9cb92846387d",
+      "name": "Prepare Sales Quotation",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1136,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b1",
+              "name": "branch",
+              "type": "string",
+              "value": "Finance"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2d04257e-6f62-4c4b-a25e-56de8b257d77",
+      "name": "Prepare Finance Summary",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1136,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b1",
+              "name": "branch",
+              "type": "string",
+              "value": "Reports"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b19ba85b-3d5e-470c-bc52-f1c6cc13ef1a",
+      "name": "Prepare Business Report",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1136,
+        768
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b1",
+              "name": "branch",
+              "type": "string",
+              "value": "Research"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e716ac19-0620-4cce-92a6-f006a2b080c4",
+      "name": "Prepare Research Summary",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1136,
+        960
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b1",
+              "name": "branch",
+              "type": "string",
+              "value": "General Task"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4218333e-ae4c-4f14-bb63-8a386ca908f0",
+      "name": "Prepare General Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1136,
+        1152
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b1",
+              "name": "branch",
+              "type": "string",
+              "value": "Unclassified"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d9bb6cd3-77cb-4dce-980e-046b9dd61e56",
+      "name": "Handle Unknown Request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1136,
+        1344
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1ibCyLlFYqWwgmdy0uEogCESiMty0O9Eqxdz3zEtkXH8",
+          "mode": "list",
+          "cachedResultName": "Untitled spreadsheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1ibCyLlFYqWwgmdy0uEogCESiMty0O9Eqxdz3zEtkXH8/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Sheet1"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Date": "={{ $json.Date }}",
+            "User": "={{ $json.User }}",
+            "Category": "={{ $json.Category }}",
+            "Status": "={{ $json.Status }}",
+            "Result": "={{ $json.Result }}"
+          },
+          "schema": [
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "User",
+              "displayName": "User",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Category",
+              "displayName": "Category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Result",
+              "displayName": "Result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "831197f3-55ff-420a-bac7-1bb1b11537e8",
+      "name": "Log To Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1584,
+        672
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "F8TpnVMKyOihpHyo",
+          "name": "Google Sheets OAuth2 API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Extract CEO Message').item.json.from }}",
+        "subject": "=Re: {{ $('CEO AI Agent').item.json.output.category }} request completed",
+        "emailType": "text",
+        "message": "=✅ {{ $('CEO AI Agent').item.json.output.category }} request completed.\n\n{{ $('CEO AI Agent').item.json.output.result }}",
+        "options": {}
+      },
+      "id": "98373a8a-e7fd-4e60-a2bc-6d1e0642ea16",
+      "name": "Reply To CEO (Email)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1808,
+        672
+      ],
+      "webhookId": "f716c783-594f-4bac-a36c-1cdbe526e070",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "KuPfNBIquk5rjjor",
+          "name": "Gmail OAuth2 API"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Email Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract CEO Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract CEO Message": {
+      "main": [
+        [
+          {
+            "node": "CEO AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CEO AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Route By Category",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "CEO AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CEO Conversation Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "CEO AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CEO Response Schema": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "CEO AI Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route By Category": {
+      "main": [
+        [
+          {
+            "node": "Send Email (Gmail)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Sales Quotation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Finance Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Business Report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Research Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare General Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Unknown Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email (Gmail)": {
+      "main": [
+        [
+          {
+            "node": "Build Log Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Log Entry": {
+      "main": [
+        [
+          {
+            "node": "Log To Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Calendar Event": {
+      "main": [
+        [
+          {
+            "node": "Build Log Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Sales Quotation": {
+      "main": [
+        [
+          {
+            "node": "Build Log Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Finance Summary": {
+      "main": [
+        [
+          {
+            "node": "Build Log Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Business Report": {
+      "main": [
+        [
+          {
+            "node": "Build Log Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Research Summary": {
+      "main": [
+        [
+          {
+            "node": "Build Log Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare General Response": {
+      "main": [
+        [
+          {
+            "node": "Build Log Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Unknown Request": {
+      "main": [
+        [
+          {
+            "node": "Build Log Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log To Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Reply To CEO (Email)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "76b77325-b669-4f42-9b9f-d9e31ccee3b4",
+  "meta": {
+    "instanceId": "f32581727f9f4e3dcbea438a9550a756be0604c0b053e6ce8076235bdeab9cdc"
+  },
+  "nodeGroups": [],
+  "id": "KkBNPy24JTljiiWf",
+  "tags": []
+}
